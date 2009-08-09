@@ -33,7 +33,6 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.EventQueue;
-import java.awt.FileDialog;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -55,7 +54,7 @@ import java.awt.event.WindowEvent;
 import java.awt.print.PageFormat;
 import java.awt.print.PrinterJob;
 import java.io.File;
-import java.io.FilenameFilter;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.Date;
 import java.util.LinkedList;
@@ -98,6 +97,7 @@ import replicatorg.app.Base;
 import replicatorg.app.MachineController;
 import replicatorg.app.MachineFactory;
 import replicatorg.app.Serial;
+import replicatorg.app.Sketchbook;
 import replicatorg.app.exceptions.SerialException;
 import replicatorg.app.syntax.JEditTextArea;
 import replicatorg.app.syntax.PdeKeywords;
@@ -229,7 +229,7 @@ public class MainWindow extends JFrame implements MRJAboutHandler, MRJQuitHandle
 	//
 
 	// SketchHistory history; // TODO re-enable history
-	//Sketchbook sketchbook;
+	Sketchbook sketchbook;
 
 	FindReplace find;
 
@@ -266,7 +266,7 @@ public class MainWindow extends JFrame implements MRJAboutHandler, MRJQuitHandle
 		// http://dev.processing.org/bugs/show_bug.cgi?id=440
 		setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 
-		//sketchbook = new Sketchbook(this);
+		sketchbook = new Sketchbook(this);
 
 		JMenuBar menubar = new JMenuBar();
 		menubar.add(buildFileMenu());
@@ -528,7 +528,7 @@ public class MainWindow extends JFrame implements MRJAboutHandler, MRJQuitHandle
 		// in case moved to a new location
 		// For 0125, changing to async version (to be implemented later)
 		// sketchbook.rebuildMenus();
-		//sketchbook.rebuildMenusAsync();
+		sketchbook.rebuildMenusAsync();
 	}
 
 	/**
@@ -682,6 +682,7 @@ public class MainWindow extends JFrame implements MRJAboutHandler, MRJQuitHandle
 			}
 		});
 		menu.add(item);
+		menu.add(sketchbook.getOpenMenu());
 
 		item = newJMenuItem("Open...", 'O', false);
 		item.addActionListener(new ActionListener() {
@@ -966,14 +967,16 @@ public class MainWindow extends JFrame implements MRJAboutHandler, MRJQuitHandle
 		menu.add(item);
 
 		// macosx already has its own about menu
-		menu.addSeparator();
-		JMenuItem aboutitem = new JMenuItem("About ReplicatorG");
-		item.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-				handleAbout();
-			}
-		});
-		menu.add(aboutitem);
+		if (!Base.isMacOS()) {
+			menu.addSeparator();
+			item = new JMenuItem("About ReplicatorG");
+			item.addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent e) {
+					handleAbout();
+				}
+			});
+			menu.add(item);
+		}
 
 		return menu;
 	}
@@ -1718,20 +1721,19 @@ public class MainWindow extends JFrame implements MRJAboutHandler, MRJQuitHandle
 	 *            app is starting (auto-create a sketch)
 	 */
 	protected void handleNew2(boolean noPrompt) {
-//		try {
-			//String pdePath = sketchbook.handleNew(noPrompt, handleNewShift);
-			//if (pdePath != null)
-			//	handleOpen2(pdePath);
+		try {
+			String pdePath = sketchbook.handleNew(noPrompt, handleNewShift);
+			if (pdePath != null)
+				handleOpen2(pdePath);
 
-//		} catch (IOException e) {
-//			// not sure why this would happen, but since there's no way to
-//			// recover (outside of creating another new setkch, which might
-//			// just cause more trouble), then they've gotta quit.
-//			Base.showError("Problem creating a new sketch",
-//					"An error occurred while creating\n"
-//							+ "a new sketch. ReplicatorG must now quit.", e);
-//		}
-		handleOpen2("*Untitled");
+		} catch (IOException e) {
+			// not sure why this would happen, but since there's no way to
+			// recover (outside of creating another new setkch, which might
+			// just cause more trouble), then they've gotta quit.
+			Base.showError("Problem creating a new sketch",
+					"An error occurred while creating\n"
+							+ "a new sketch. ReplicatorG must now quit.", e);
+		}
 		buttons.clear();
 	}
 
@@ -1744,41 +1746,6 @@ public class MainWindow extends JFrame implements MRJAboutHandler, MRJQuitHandle
 		handleOpen(file.getAbsolutePath());
 	}
 
-	private String selectFile() {
-		// swing's file choosers are ass ugly, so we use the
-		// native (awt peered) dialogs where possible
-		FileDialog fd = new FileDialog(this,
-				"Open a Processing sketch...", FileDialog.LOAD);
-		// fd.setDirectory(Preferences.get("sketchbook.path"));
-		// fd.setDirectory(getSketchbookPath());
-
-		// only show .gcode files as eligible bachelors
-		// TODO this doesn't seem to ever be used. AWESOME.
-		fd.setFilenameFilter(new FilenameFilter() {
-			public boolean accept(File dir, String name) {
-				// System.out.println("check filter on " + dir + " " + name);
-				return name.toLowerCase().endsWith(".gcode");
-			}
-		});
-
-		// gimme some money
-		fd.setVisible(true);
-
-		// what in the hell yu want, boy?
-		String directory = fd.getDirectory();
-		String filename = fd.getFile();
-
-		// user cancelled selection
-		if (filename == null)
-			return null;
-
-		// this may come in handy sometime
-		// handleOpenDirectory = directory;
-
-		File selection = new File(directory, filename);
-		return selection.getAbsolutePath();
-
-	}
 	/**
 	 * Open a sketch given the full path to the .gcode file. Pass in 'null' to
 	 * prompt the user for the name of the sketch.
@@ -1791,7 +1758,7 @@ public class MainWindow extends JFrame implements MRJAboutHandler, MRJQuitHandle
 			public void run() {
 				String path = ipath;
 				if (path == null) { // "open..." selected from the menu
-					path = selectFile();
+					path = sketchbook.handleOpen();
 					if (path == null)
 						return;
 				}
@@ -1833,7 +1800,7 @@ public class MainWindow extends JFrame implements MRJAboutHandler, MRJQuitHandle
 					if (Base.calcFolderSize(sketch.folder) == 0) {
 						Base.removeDir(sketch.folder);
 						// sketchbook.rebuildMenus();
-						//sketchbook.rebuildMenusAsync();
+						sketchbook.rebuildMenusAsync();
 					}
 				}
 			} catch (Exception e) {
@@ -1843,75 +1810,74 @@ public class MainWindow extends JFrame implements MRJAboutHandler, MRJQuitHandle
 		try {
 			// check to make sure that this .gcode file is
 			// in a folder of the same name
-			// BZZZT WRONG.
-//			File file = new File(path);
-//			File parentFile = new File(file.getParent());
-//			String parentName = parentFile.getName();
-//			String pdeName = parentName + ".gcode";
-//			File altFile = new File(file.getParent(), pdeName);
+			File file = new File(path);
+			File parentFile = new File(file.getParent());
+			String parentName = parentFile.getName();
+			String pdeName = parentName + ".gcode";
+			File altFile = new File(file.getParent(), pdeName);
 
 			// System.out.println("path = " + file.getParent());
 			// System.out.println("name = " + file.getName());
 			// System.out.println("pname = " + parentName);
 
-//			if (pdeName.equals(file.getName())) {
-//				// no beef with this guy
-//
-//			} else if (altFile.exists()) {
-//				// but open the .gcode instead
-//				path = altFile.getAbsolutePath();
-//				// System.out.println("found alt file in same folder");
-//
-//			} else if (!path.endsWith(".gcode")) {
-//				Base.showWarning("Bad file selected",
-//						"ReplicatorG can only open its own sketches\n"
-//								+ "and other files ending in .gcode", null);
-//				throw new Exception();
-//				// return;
-//
-//			} else {
-//				String properParent = file.getName().substring(0,
-//						file.getName().length() - 6);
-//
-//				Object[] options = { "OK", "Cancel" };
-//				String prompt = "The file \"" + file.getName()
-//						+ "\" needs to be inside\n"
-//						+ "a sketch folder named \"" + properParent + "\".\n"
-//						+ "Create this folder, move the file, and continue?";
-//
-//				int result = JOptionPane
-//						.showOptionDialog(this, prompt, "Moving",
-//								JOptionPane.YES_NO_OPTION,
-//								JOptionPane.QUESTION_MESSAGE, null, options,
-//								options[0]);
-//
-//				if (result == JOptionPane.YES_OPTION) {
-//					// create properly named folder
-//					File properFolder = new File(file.getParent(), properParent);
-//					if (properFolder.exists()) {
-//						Base.showWarning("Error", "A folder named \""
-//								+ properParent + "\" "
-//								+ "already exists. Can't open sketch.", null);
-//						return;
-//					}
-//					if (!properFolder.mkdirs()) {
-//						throw new IOException("Couldn't create sketch folder");
-//					}
-//					// copy the sketch inside
-//					File properPdeFile = new File(properFolder, file.getName());
-//					File origPdeFile = new File(path);
-//					Base.copyFile(origPdeFile, properPdeFile);
-//
-//					// remove the original file, so user doesn't get confused
-//					origPdeFile.delete();
-//
-//					// update with the new path
-//					path = properPdeFile.getAbsolutePath();
-//
-//				} else if (result == JOptionPane.NO_OPTION) {
-//					return;
-//				}
-//			}
+			if (pdeName.equals(file.getName())) {
+				// no beef with this guy
+
+			} else if (altFile.exists()) {
+				// but open the .gcode instead
+				path = altFile.getAbsolutePath();
+				// System.out.println("found alt file in same folder");
+
+			} else if (!path.endsWith(".gcode")) {
+				Base.showWarning("Bad file selected",
+						"ReplicatorG can only open its own sketches\n"
+								+ "and other files ending in .gcode", null);
+				throw new Exception();
+				// return;
+
+			} else {
+				String properParent = file.getName().substring(0,
+						file.getName().length() - 6);
+
+				Object[] options = { "OK", "Cancel" };
+				String prompt = "The file \"" + file.getName()
+						+ "\" needs to be inside\n"
+						+ "a sketch folder named \"" + properParent + "\".\n"
+						+ "Create this folder, move the file, and continue?";
+
+				int result = JOptionPane
+						.showOptionDialog(this, prompt, "Moving",
+								JOptionPane.YES_NO_OPTION,
+								JOptionPane.QUESTION_MESSAGE, null, options,
+								options[0]);
+
+				if (result == JOptionPane.YES_OPTION) {
+					// create properly named folder
+					File properFolder = new File(file.getParent(), properParent);
+					if (properFolder.exists()) {
+						Base.showWarning("Error", "A folder named \""
+								+ properParent + "\" "
+								+ "already exists. Can't open sketch.", null);
+						return;
+					}
+					if (!properFolder.mkdirs()) {
+						throw new IOException("Couldn't create sketch folder");
+					}
+					// copy the sketch inside
+					File properPdeFile = new File(properFolder, file.getName());
+					File origPdeFile = new File(path);
+					Base.copyFile(origPdeFile, properPdeFile);
+
+					// remove the original file, so user doesn't get confused
+					origPdeFile.delete();
+
+					// update with the new path
+					path = properPdeFile.getAbsolutePath();
+
+				} else if (result == JOptionPane.NO_OPTION) {
+					return;
+				}
+			}
 
 			sketch = new Sketch(this, path);
 			handleOpenPath = path;
@@ -2082,7 +2048,7 @@ public class MainWindow extends JFrame implements MRJAboutHandler, MRJQuitHandle
 
 		storePreferences();
 
-		//sketchbook.clean();
+		sketchbook.clean();
 		console.handleQuit();
 
 		// System.out.println("exiting here");

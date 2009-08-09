@@ -366,7 +366,11 @@ public class MainButtonPanel extends JComponent implements MouseInputListener, M
 			break;
 
 		case OPEN:
-			editor.handleOpen(null);
+			if (popup == null) {
+				popup = editor.sketchbook.getPopupMenu();
+				add(popup);
+			}
+			popup.show(MainButtonPanel.this, x, y);
 			break;
 
 		case NEW:
