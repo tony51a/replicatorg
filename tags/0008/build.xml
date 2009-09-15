@@ -1,0 +1,210 @@
+<project name="ReplicatorG" basedir="." default="test">
+  <property name="project.lowercase" value="replicatorg"/>
+  <property file="ant.includes/${os.name}-${os.arch}.properties" />
+	<echo>${os.name}-${os.arch}</echo>
+  <property name="src.dir"       value="src"/>
+  <property name="build.dir"     value="build"/>
+  <property name="classes.dir"   value="${build.dir}/classes"/> 
+  <property name="jar.dir"       value="${build.dir}/jar"/>
+  <property name="resources.dir" value="resources"/>
+  <property name="shared.dir"    value="${build.dir}/shared"/>
+  <property name="lib.dir"       value="${shared.dir}/lib"/>
+  <property name="ant.build.javac.target" value="1.5"/>
+
+  <path id="classpath">
+    <!-- include jarbundler -->
+    <fileset dir="build/macosx" includes="*.jar"/>
+    <fileset dir="${lib.dir}" includes="*.jar"/>
+    <pathelement path="/System/Library/Java"/>
+  </path>
+
+  <target name="test">
+    <echo message="Version: ${replicatorg.version}"/>
+  </target>
+
+  <target name="clean">
+    <delete dir="${classes.dir}"/>
+    <delete dir="${jar.dir}"/>
+    <delete dir="dist"/>
+  </target>
+
+  <target name="compile">
+    <mkdir dir="${classes.dir}"/>
+    <javac srcdir="${src.dir}" destdir="${classes.dir}" classpathref="classpath" debug="true" debuglevel="lines,vars,source" source="1.5"/>
+  </target>
+
+  <target name="jar" depends="compile">
+    <mkdir dir="${jar.dir}"/>
+    <copy todir="${classes.dir}">
+      <fileset dir="${resources.dir}"/>
+    </copy>
+    <jar destfile="${jar.dir}/${ant.project.name}.jar" basedir="${classes.dir}">
+    </jar>
+  </target>
+
+  <target name="run" depends="jar">
+    <java fork="true" classname="replicatorg.app.Base"> <!-- jvm="/usr/lib/jvm/java-1.5.0-sun/bin/java" -->
+      <jvmarg value="-ea"/>
+      <classpath>
+	<path refid="classpath"/>
+	<pathelement location="${jar.dir}/${ant.project.name}.jar"/>
+      </classpath>
+      <sysproperty key="java.library.path" path="${native.lib.dir}"/>
+      <sysproperty key="replicatorg.app-resources" path="${lib.dir}"/>
+    	<sysproperty key="replicatorg.toolpath" path="${native.tools.dir}"/>
+    </java>
+  </target>
+  
+  <target name="debug" depends="compile">
+    <java fork="true" classname="replicatorg.app.Base">
+      <jvmarg value="-ea"/>
+      <jvmarg value="-Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=8000"/>
+      <classpath>
+        <path refid="classpath"/>
+        <pathelement location="${classes.dir}"/>
+      </classpath>
+      <sysproperty key="java.library.path" path="${native.lib.dir}"/>
+      <sysproperty key="replicatorg.app-resources" path="${lib.dir}"/>
+    </java>
+  </target>
+
+  <target name="dist-macosx" depends="jar">
+    <property name="release.name" value="${project.lowercase}-${replicatorg.version}"/>
+    <property name="target.dir"   value="dist/macosx/${release.name}"/>
+    <property name="dist.dir"     value="build/macosx/dist"/>
+
+    <fail message="The disk image (DMG-file) for easy distribution on Mac OS X can only be built on Mac OS X currently">
+      <condition>
+        <not>
+          <os family="mac" />
+        </not>
+      </condition>
+    </fail> 
+    <taskdef name="jarbundler" classname="net.sourceforge.jarbundler.JarBundler" />
+    <mkdir dir="${target.dir}"/>
+    <jarbundler
+       dir="${target.dir}"
+       name="ReplicatorG" 
+       mainclass="replicatorg.app.Base" 
+       icon="${dist.dir}/replicatorg.icns"
+       extraclasspath="/System/Library/Java"
+       vmoptions="-Xmx1G"
+       infostring="ReplicatorG ${replicatorg.version}, © 2008-${current.year} MakerBot Industries" 
+       version="${replicatorg.version}"
+       jvmversion="1.5+"
+       stubfile="ReplicatorG"
+       >
+      <jarfileset dir="${jar.dir}" includes="ReplicatorG.jar"/>
+      <jarfileset dir="${lib.dir}" includes="*.jar"/>
+      <jarfileset dir="${dist.dir}" includes="*.jnilib"/>
+      <documenttype name="CNC GCode document" 
+                    extensions="gcode" 
+                    iconFile="${dist.dir}/replicatorg.icns"
+                    role="Editor"/>
+      <resourcefileset dir="${lib.dir}" includes="*.gif"/>
+      <resourcefileset dir="${lib.dir}" includes="*.jpg"/>
+      <javaproperty name="replicatorg.app-resources" value="$APP_PACKAGE/Contents/Resources"/>
+    </jarbundler>
+    <copy todir="${target.dir}">
+      <filelist dir="." files="license.txt,readme.txt,todo.txt"/>
+      <fileset dir="${dist.dir}" includes="drivers/*.dmg"/>
+    </copy>
+    <copy todir="${target.dir}/tools">
+      <filelist dir="${dist.dir}/tools" files="avrdude,avrdude.conf,*a"/>
+    </copy>
+    <chmod file="${target.dir}/tools/avrdude" perm="ugo+rx"/>
+    <copy todir="${target.dir}/firmware">
+      <fileset dir="firmware"/>
+    </copy>
+    <copy file="machines.xml.dist" tofile="${target.dir}/machines.xml"/>
+    <copy file="firmware.xml.dist" tofile="${target.dir}/firmware.xml"/>
+    <exec dir="." os="Mac OS X" executable="/usr/bin/lipo">
+      <arg value="-remove"/>
+      <arg value="x86_64"/>
+      <arg value="${target.dir}/ReplicatorG.app/Contents/MacOS/ReplicatorG"/>
+      <arg value="-output"/>
+      <arg value="${target.dir}/ReplicatorG.app/Contents/MacOS/ReplicatorG"/>
+    </exec>
+    <exec dir="." os="Mac OS X" executable="/bin/sh">
+      <arg value="-c"/>
+      <arg value="${dist.dir}/mkdmg.sh ${target.dir} . image ${release.name}-mac"/>
+    </exec>
+    <!--		<gzip zipfile="${macosx.dist.dir}-image/ReplicatorG .dmg.gz" src="${dist}/mac-image/MyTool.dmg"/>-->
+  </target>
+
+  <target name="dist-common" depends="jar">
+    <mkdir dir="${target.dir}"/>
+    <copy todir="${target.dir}">
+      <filelist dir="." files="license.txt,readme.txt,todo.txt"/>
+      <fileset dir="${build.dir}/shared" includes="lib/*.jar"/>
+    </copy>
+    <copy file="machines.xml.dist" tofile="${target.dir}/machines.xml"/>
+    <copy file="firmware.xml.dist" tofile="${target.dir}/firmware.xml"/>
+    <copy todir="${target.dir}/firmware">
+      <fileset dir="firmware"/>
+    </copy>
+    <copy todir="${target.dir}/lib">
+      <fileset dir="${lib.dir}" includes="*.gif"/>
+      <fileset dir="${lib.dir}" includes="*.jpg"/>
+      <filelist dir="${lib.dir}" files="keywords.txt"/>
+      <fileset dir="${jar.dir}" includes="*.jar"/>
+    </copy>
+  </target>
+  
+  <target name="dist-linux" depends="jar">
+    <property name="release.name" value="${project.lowercase}-${replicatorg.version}"/>
+    <property name="target.dir"   value="dist/linux/${release.name}"/>
+    <property name="dist.dir"     value="build/linux/dist"/>
+
+    <!-- standard files -->
+    <antcall target="dist-common"/>
+    <!-- platform-specific files -->
+    <copy todir="${target.dir}">
+      <filelist dir="${dist.dir}" files="replicatorg"/>
+    </copy>
+    <copy todir="${target.dir}/tools">
+      <filelist dir="${dist.dir}/tools" files="avrdude,avrdude.conf"/>
+    </copy>
+    <copy todir="${target.dir}/lib-i686">
+      <fileset dir="${dist.dir}/lib-i686" includes="*.so"/>
+    </copy>
+    <copy todir="${target.dir}/lib-x86_64">
+      <fileset dir="${dist.dir}/lib-x86_64" includes="*.so"/>
+    </copy>
+    <!-- permissions -->
+    <chmod file="${target.dir}/replicatorg" perm="ugo+rx"/>
+    <chmod file="${target.dir}/tools/avrdude" perm="ugo+rx"/>
+
+    <!-- Generate the .tgz -->
+    <exec dir="dist/linux" executable="/bin/tar">
+      <arg value="czf"/>
+      <arg value="../${release.name}-linux.tgz"/>
+      <arg value="${release.name}"/>
+    </exec>
+  </target>
+
+  <target name="dist-windows" depends="jar">
+    <property name="release.name" value="${project.lowercase}-${replicatorg.version}"/>
+    <property name="target.dir"   value="dist/windows/${release.name}"/>
+    <property name="dist.dir"     value="build/windows/dist"/>
+    <!-- standard files -->
+    <antcall target="dist-common"/>
+    <!-- platform-specific files -->
+    <copy todir="${target.dir}">
+      <fileset dir="${dist.dir}" includes="*.dll"/>
+      <filelist dir="${dist.dir}" files="ReplicatorG.exe"/>
+      <fileset dir="${dist.dir}" includes="drivers/**/*"/>
+    </copy>
+    <copy todir="${target.dir}/tools">
+      <fileset dir="${dist.dir}/tools"/>
+    </copy>
+    <zip
+       destfile="dist/${project.lowercase}-${replicatorg.version}-windows.zip"
+       basedir="${target.dir}/..">
+    </zip>
+  </target>
+
+  <target name="dist" depends="dist-linux,dist-macosx,dist-windows">
+  </target>
+
+</project>

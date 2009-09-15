@@ -1,0 +1,7 @@
+For 0009:
+* ignore interactive commands on non-interactive builds
+* STL file previewer
+* integrated slicer framework
+* clean up machine state and controller
+* state icons
+* disconnect button
