@@ -1,0 +1,3 @@
+The goal of ReplicatorG is to make a simple, easy to use GUI for controlling and running RepRap compatible machines.  We're starting by taking the hard work from another project we admire (Arduino) and modifying it into something just as awesome.  Thanks to the wonder of open source, we can stand on the shoulders of giants.
+
+ReplicatorG is no longer developed here!  We are now hosting the source tree on GitHub.  You can find the current version at http://github.com/makerbot/ReplicatorG.
